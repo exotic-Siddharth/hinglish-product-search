@@ -19,8 +19,8 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from hps.checkpoint import load_ckpt, save_ckpt
-from hps.hinglish import Hinglishifier
+from hps.checkpoint import load_ckpt, run_fingerprint, save_ckpt
+from hps.hinglish import Hinglishifier, heldout_words
 from hps.metrics import GAINS, ndcg_at_k
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -85,8 +85,10 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     ckpt = out / "ckpt.pt"
     start = 0
-    if ckpt.exists():
-        start = load_ckpt(ckpt, model, opt, sched)["step"]
+    fingerprint = run_fingerprint(vars(args), heldout_words())
+    state = load_ckpt(ckpt, model, opt, sched, fingerprint)
+    if state:
+        start = state["step"]
         print(f"resumed from step {start}", flush=True)
     else:
         print(f"{len(train)} pairs, {total} steps; base val judged nDCG "
@@ -109,7 +111,7 @@ def main():
         if (step + 1) % 100 == 0:
             print(f"step {step + 1}/{total} loss {loss.item():.4f} {time.time() - t0:.0f}s", flush=True)
         if (step + 1) % args.ckpt_every == 0:
-            save_ckpt(ckpt, model, opt, sched, step=step + 1)
+            save_ckpt(ckpt, model, opt, sched, fingerprint, step=step + 1)
 
     model.eval()
     log = {"val_en": judged_ndcg(model, tok, val), "val_hx": judged_ndcg(model, tok, val, hx=True)}

@@ -24,8 +24,8 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
-from hps.checkpoint import load_ckpt, save_ckpt
-from hps.hinglish import Hinglishifier
+from hps.checkpoint import load_ckpt, run_fingerprint, save_ckpt
+from hps.hinglish import Hinglishifier, heldout_words
 from hps.metrics import ndcg_at_k
 from hps.retrieval import encode, load_encoder
 
@@ -112,8 +112,9 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     ckpt = out / "ckpt.pt"
     log, step, t0 = [], 0, time.time()
-    if ckpt.exists():
-        state = load_ckpt(ckpt, model, opt, sched)
+    fingerprint = run_fingerprint(vars(args), heldout_words())
+    state = load_ckpt(ckpt, model, opt, sched, fingerprint)
+    if state:
         log, step = state["log"], state["step"]
         print(f"resumed from step {step}", flush=True)
 
@@ -150,7 +151,7 @@ def main():
             print(v, flush=True)
             model.train()
         if end_of_epoch or step % args.ckpt_every == 0:
-            save_ckpt(ckpt, model, opt, sched, step=step, log=log)
+            save_ckpt(ckpt, model, opt, sched, fingerprint, step=step, log=log)
 
     model.eval()
     model.save(str(out))

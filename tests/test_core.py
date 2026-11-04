@@ -9,7 +9,15 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 
 from hps.bm25 import BM25
-from hps.hinglish import Hinglishifier, is_heldout, load_lexicon
+from hps.hinglish import (
+    ALWAYS_SEEN,
+    PARTICLES,
+    Hinglishifier,
+    entry_roots,
+    is_heldout,
+    load_lexicon,
+    root,
+)
 from hps.metrics import mrr_at_k, ndcg_at_k, recall_at_k
 
 
@@ -49,6 +57,35 @@ def test_training_augmentation_never_uses_heldout_words():
         assert not any(map(is_heldout, used))
 
 
+def test_no_heldout_hindi_word_is_reachable_from_training():
+    """The "unseen words" results are only honest if this holds, for every
+    word, spelling and inflection that training augmentation can produce."""
+    lex = load_lexicon()
+    held = {w for w in lex if is_heldout(w)}
+    assert held
+    held_roots = set().union(*(entry_roots(lex[w]) for w in held))
+    held_tokens = {t for w in held for v in lex[w] for t in v.split() if t not in PARTICLES}
+
+    assert not held_roots & {root(t) for t in ALWAYS_SEEN}
+    for word, variants in lex.items():
+        if word not in held:
+            assert not entry_roots(variants) & held_roots, word
+
+    h = Hinglishifier(words="train", p_word=1.0, p_rule=1.0, p_noise=1.0, p_frame=1.0)
+    rng = random.Random(0)
+    everything = " for ".join(lex) + " with " + " without ".join(lex)
+    for _ in range(200):
+        assert not set(h(everything, rng)[0].split()) & held_tokens
+
+
+def test_word_families_stay_together():
+    # big/large share a Hindi word, man/men are inflections, kaala/kala are spellings.
+    for a, b in (("big", "large"), ("man", "men"), ("shoe", "shoes"), ("hot", "warm")):
+        assert is_heldout(a) == is_heldout(b)
+    assert root("kaala") == root("kala")
+    assert root("mard") == root("mardon")
+
+
 def test_grammar_rules():
     h = Hinglishifier(p_word=0.0, p_rule=1.0, p_reorder=0.0, p_frame=0.0)
     rng = random.Random(0)
@@ -77,7 +114,7 @@ def test_bm25_ranks_matching_doc_first():
 def test_checkpoint_restores_model_optimizer_and_step(tmp_path):
     import torch
 
-    from hps.checkpoint import load_ckpt, save_ckpt
+    from hps.checkpoint import load_ckpt, run_fingerprint, save_ckpt
 
     def build():
         m = torch.nn.Linear(3, 1)
@@ -88,10 +125,17 @@ def test_checkpoint_restores_model_optimizer_and_step(tmp_path):
     m(torch.ones(1, 3)).sum().backward()
     o.step()
     s.step()
-    save_ckpt(tmp_path / "c.pt", m, o, s, step=7, log=[{"val": 0.5}])
+    run = run_fingerprint({"lr": 0.1}, {"a", "b"})
+    save_ckpt(tmp_path / "c.pt", m, o, s, run, step=7, log=[{"val": 0.5}])
 
     m2, o2, s2 = build()
-    state = load_ckpt(tmp_path / "c.pt", m2, o2, s2)
+    untouched = m2.weight.clone()
+    other_run = run_fingerprint({"lr": 0.1}, {"a"})
+    assert load_ckpt(tmp_path / "c.pt", m2, o2, s2, other_run) is None
+    assert torch.equal(m2.weight, untouched)
+    assert load_ckpt(tmp_path / "missing.pt", m2, o2, s2, run) is None
+
+    state = load_ckpt(tmp_path / "c.pt", m2, o2, s2, run)
     assert state == {"step": 7, "log": [{"val": 0.5}]}
     assert torch.equal(m.weight, m2.weight)
     assert s2.last_epoch == 1

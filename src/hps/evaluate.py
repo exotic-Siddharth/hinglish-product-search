@@ -23,7 +23,7 @@ import numpy as np
 import pandas as pd
 
 from hps.bm25 import BM25
-from hps.metrics import ndcg_at_k, summarise
+from hps.metrics import ndcg_at_k, recall_at_k, summarise
 from hps.retrieval import (
     DenseIndex,
     corpus_embeddings,
@@ -142,6 +142,17 @@ def main():
             judged.append(ndcg_at_k([items[i] for i in np.argsort(-s)], qrels[q], 10))
         res["judged_ndcg@10"] = float(np.mean(judged))
         results[set_name] = res
+
+        # Per-query scores feed the paired bootstrap confidence intervals in report.py.
+        has_exact = [q for q in qids if "E" in qrels[q].values()]
+        scores = pd.DataFrame({"query_id": qids, "judged_ndcg@10": judged}).merge(pd.DataFrame({
+            "query_id": has_exact,
+            "ndcg@10": [ndcg_at_k(runs[q], qrels[q], 10) for q in has_exact],
+            "recall@100": [recall_at_k(runs[q], qrels[q], 100) for q in has_exact],
+        }), on="query_id", how="left")
+        per_query = ROOT / "results" / "per_query"
+        per_query.mkdir(parents=True, exist_ok=True)
+        scores.to_csv(per_query / f"{name}__{set_name}.csv", index=False)
         print(f"{set_name:11s} " + "  ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
                                             for k, v in res.items()))
 
