@@ -10,7 +10,14 @@ import time
 
 import numpy as np
 
-from hps.retrieval import DenseIndex, corpus_embeddings, encode, eval_corpus, load_encoder, load_reranker
+from hps.retrieval import (
+    DenseIndex,
+    corpus_embeddings,
+    encode,
+    eval_corpus,
+    load_encoder,
+    load_reranker,
+)
 
 
 class Searcher:

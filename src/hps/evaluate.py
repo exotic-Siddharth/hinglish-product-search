@@ -24,7 +24,14 @@ import pandas as pd
 
 from hps.bm25 import BM25
 from hps.metrics import ndcg_at_k, summarise
-from hps.retrieval import DenseIndex, corpus_embeddings, encode, eval_corpus, load_encoder, load_reranker
+from hps.retrieval import (
+    DenseIndex,
+    corpus_embeddings,
+    encode,
+    eval_corpus,
+    load_encoder,
+    load_reranker,
+)
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "data" / "processed"

@@ -27,7 +27,7 @@ def product_text(df):
     text = df["product_title"].fillna("")
     for col, name in (("product_brand", "brand"), ("product_color", "color")):
         v = df[col].fillna("").str.strip()
-        text = text + v.map(lambda s: f" | {name}: {s}" if s else "")
+        text = text + v.map(lambda s, name=name: f" | {name}: {s}" if s else "")
     return text.str.slice(0, 400)
 
 

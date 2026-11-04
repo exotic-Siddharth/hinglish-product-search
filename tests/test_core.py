@@ -76,6 +76,7 @@ def test_bm25_ranks_matching_doc_first():
 
 def test_checkpoint_restores_model_optimizer_and_step(tmp_path):
     import torch
+
     from hps.checkpoint import load_ckpt, save_ckpt
 
     def build():
