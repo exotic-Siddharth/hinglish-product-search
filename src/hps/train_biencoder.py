@@ -24,6 +24,7 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
+from hps.checkpoint import load_ckpt, save_ckpt
 from hps.hinglish import Hinglishifier
 from hps.metrics import ndcg_at_k
 from hps.retrieval import encode, load_encoder
@@ -90,12 +91,12 @@ def main():
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--scale", type=float, default=20.0, help="inverse temperature of the softmax")
     ap.add_argument("--max-steps", type=int, default=None, help="for smoke tests")
+    ap.add_argument("--ckpt-every", type=int, default=50, help="steps between resumable checkpoints")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    rng = random.Random(args.seed)
     model = load_encoder(args.base)
     hx = Hinglishifier(words="train")
     examples = build_examples("train")
@@ -107,40 +108,54 @@ def main():
         opt, lambda s: min((s + 1) / warmup, max(0.0, (total - s) / (total - warmup))))
     print(f"{len(examples)} training queries, {steps_per_epoch} steps/epoch, {total} steps total")
 
-    log, step, t0 = [], 0, time.time()
-    for epoch in range(args.epochs):
-        model.train()
-        rng.shuffle(examples)
-        for b in range(steps_per_epoch):
-            if step >= total:
-                break
-            batch = examples[b * args.batch:(b + 1) * args.batch]
-            queries = [hx(q, rng)[0] if rng.random() < args.p_hx else q for q, _, _ in batch]
-            pos = [rng.choice(p) for _, p, _ in batch]
-            neg = [rng.choice(n) for _, _, n in batch if n]
-            qe = embed(model, queries, 32)
-            de = embed(model, pos + neg, 64)
-            logits = args.scale * qe @ de.T
-            loss = F.cross_entropy(logits, torch.arange(len(batch), device=logits.device))
-            loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
-            opt.step()
-            sched.step()
-            opt.zero_grad()
-            step += 1
-            if step % 50 == 0 or step == total:
-                print(f"epoch {epoch} step {step}/{total} loss {loss.item():.4f} {time.time() - t0:.0f}s", flush=True)
-        model.eval()
-        with torch.no_grad():
-            v = {"epoch": epoch, "step": step, "val_en": judged_ndcg(model), "val_hx": judged_ndcg(model, hx=True)}
-        log.append(v)
-        print(v, flush=True)
-        if step >= total:
-            break
-
     out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    ckpt = out / "ckpt.pt"
+    log, step, t0 = [], 0, time.time()
+    if ckpt.exists():
+        state = load_ckpt(ckpt, model, opt, sched)
+        log, step = state["log"], state["step"]
+        print(f"resumed from step {step}", flush=True)
+
+    model.train()
+    while step < total:
+        # Order and augmentation depend only on (seed, step), so a resumed run
+        # continues exactly where the interrupted one stopped.
+        epoch, b = divmod(step, steps_per_epoch)
+        order = list(range(len(examples)))
+        random.Random(args.seed * 1000 + epoch).shuffle(order)
+        rng = random.Random(args.seed * 10**6 + step)
+        batch = [examples[i] for i in order[b * args.batch:(b + 1) * args.batch]]
+        queries = [hx(q, rng)[0] if rng.random() < args.p_hx else q for q, _, _ in batch]
+        pos = [rng.choice(p) for _, p, _ in batch]
+        neg = [rng.choice(n) for _, _, n in batch if n]
+        qe = embed(model, queries, 32)
+        de = embed(model, pos + neg, 64)
+        logits = args.scale * qe @ de.T
+        loss = F.cross_entropy(logits, torch.arange(len(batch), device=logits.device))
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)
+        opt.step()
+        sched.step()
+        opt.zero_grad()
+        step += 1
+        if step % 50 == 0 or step == total:
+            print(f"epoch {epoch} step {step}/{total} loss {loss.item():.4f} {time.time() - t0:.0f}s", flush=True)
+        end_of_epoch = step % steps_per_epoch == 0 or step == total
+        if end_of_epoch:
+            model.eval()
+            with torch.no_grad():
+                v = {"epoch": epoch, "step": step, "val_en": judged_ndcg(model), "val_hx": judged_ndcg(model, hx=True)}
+            log.append(v)
+            print(v, flush=True)
+            model.train()
+        if end_of_epoch or step % args.ckpt_every == 0:
+            save_ckpt(ckpt, model, opt, sched, step=step, log=log)
+
+    model.eval()
     model.save(str(out))
     (out / "train_log.json").write_text(json.dumps({"args": vars(args), "log": log}, indent=2))
+    ckpt.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

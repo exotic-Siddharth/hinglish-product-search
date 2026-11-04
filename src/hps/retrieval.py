@@ -27,7 +27,7 @@ def load_reranker(path, quantize=False):
     if quantize:
         import torch
         from torch.ao.quantization import quantize_dynamic
-        cross.model = quantize_dynamic(cross.model, {torch.nn.Linear}, dtype=torch.qint8)
+        quantize_dynamic(cross.model, {torch.nn.Linear}, dtype=torch.qint8, inplace=True)
     return cross
 
 

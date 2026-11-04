@@ -26,3 +26,12 @@ run hps.evaluate --retriever ../models/bi_hx
 run hps.train_reranker --out ../models/rr_hx --p-hx 0.5 --pairs 40000
 run hps.evaluate --retriever ../models/bi_hx --limit 2000 --name bi_hx_2k
 run hps.evaluate --retriever ../models/bi_hx --reranker ../models/rr_hx --limit 2000
+run hps.evaluate --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize --limit 2000
+run hps.evaluate --retriever ../models/bi_hx --reranker ../models/rr_hx --sets llm,llm_en,hand,hand_en --name bi_hx+rr_hx_free
+
+# 4. latency, one query at a time on CPU
+run hps.latency --retriever ../models/bi_hx
+run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx
+run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize
+
+python -m hps.report

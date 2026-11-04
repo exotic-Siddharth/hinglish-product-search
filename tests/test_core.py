@@ -72,3 +72,26 @@ def test_bm25_ranks_matching_doc_first():
     _, idx = bm.search(["water bottle"], k=2)
     assert idx[0, 0] == 1
     assert bm.score("leather wallet", [0, 2]).argmax() == 1
+
+
+def test_checkpoint_restores_model_optimizer_and_step(tmp_path):
+    import torch
+    from hps.checkpoint import load_ckpt, save_ckpt
+
+    def build():
+        m = torch.nn.Linear(3, 1)
+        o = torch.optim.AdamW(m.parameters(), lr=0.1)
+        return m, o, torch.optim.lr_scheduler.LambdaLR(o, lambda s: 1 / (s + 1))
+
+    m, o, s = build()
+    m(torch.ones(1, 3)).sum().backward()
+    o.step()
+    s.step()
+    save_ckpt(tmp_path / "c.pt", m, o, s, step=7, log=[{"val": 0.5}])
+
+    m2, o2, s2 = build()
+    state = load_ckpt(tmp_path / "c.pt", m2, o2, s2)
+    assert state == {"step": 7, "log": [{"val": 0.5}]}
+    assert torch.equal(m.weight, m2.weight)
+    assert s2.last_epoch == 1
+    assert o2.state_dict()["state"][0]["step"] == o.state_dict()["state"][0]["step"]

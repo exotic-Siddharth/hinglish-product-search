@@ -44,14 +44,20 @@ def load(split, limit=None):
         "hx": dict(zip(queries.query_id[queries.n_sub > 0], queries.query_hx[queries.n_sub > 0])),
         "hx_heldout": dict(zip(queries.query_id[queries.n_heldout > 0], queries.query_hx[queries.n_heldout > 0])),
     }
-    # Real Hinglish written by a person (data/handwritten_hinglish.csv), if filled in.
-    hand_path = ROOT / "data" / "handwritten_hinglish.csv"
-    if hand_path.exists():
-        hand = pd.read_csv(hand_path, dtype={"your_hinglish": str}).dropna(subset=["your_hinglish"])
-        hand = hand[hand.query_id.isin(qrels) & (hand.your_hinglish.str.strip() != "")]
-        if len(hand):
-            sets["hand"] = dict(zip(hand.query_id, hand.your_hinglish.str.strip()))
-            sets["hand_en"] = dict(zip(hand.query_id, hand.english_query))
+    # Free-form Hinglish for 150 test queries, NOT made by the generator:
+    #   llm   written by an LLM (data/llm_hinglish.csv)
+    #   hand  written by a person (data/handwritten_hinglish.csv), once filled in
+    # Each is paired with "<set>_en", the English originals of the same queries.
+    for set_name, file, col in (("llm", "llm_hinglish.csv", "llm_hinglish"),
+                                ("hand", "handwritten_hinglish.csv", "your_hinglish")):
+        path = ROOT / "data" / file
+        if not path.exists():
+            continue
+        df = pd.read_csv(path, dtype={col: str}).dropna(subset=[col])
+        df = df[df.query_id.isin(qrels) & (df[col].str.strip() != "")]
+        if len(df):
+            sets[set_name] = dict(zip(df.query_id, df[col].str.strip()))
+            sets[f"{set_name}_en"] = dict(zip(df.query_id, df.english_query))
     return sets, qrels, products
 
 
@@ -95,12 +101,15 @@ def main():
     ap.add_argument("--split", default="test")
     ap.add_argument("--limit", type=int, default=None, help="evaluate a random subset of queries")
     ap.add_argument("--name", default=None)
+    ap.add_argument("--sets", default=None, help="comma-separated query sets to run (default: all)")
     args = ap.parse_args()
     name = args.name or (Path(args.retriever).name
                          + (f"+{Path(args.reranker).name}" if args.reranker else "")
                          + ("_int8" if args.quantize else ""))
 
     sets, qrels, products = load(args.split, args.limit)
+    if args.sets:
+        sets = {k: v for k, v in sets.items() if k in args.sets.split(",")}
     pids = products["product_id"].tolist()
     pid_index = {p: i for i, p in enumerate(pids)}
     t0 = time.time()
@@ -129,11 +138,13 @@ def main():
         print(f"{set_name:11s} " + "  ".join(f"{k}={v:.4f}" if isinstance(v, float) else f"{k}={v}"
                                             for k, v in res.items()))
 
-    out = ROOT / "results"
-    out.mkdir(exist_ok=True)
-    (out / f"{name}__{args.split}.json").write_text(json.dumps(
-        {"retriever": args.retriever, "reranker": args.reranker, "split": args.split,
-         "limit": args.limit, "results": results}, indent=2))
+    # Merge into an existing results file, so a re-run of some sets keeps the others.
+    path = ROOT / "results" / f"{name}__{args.split}.json"
+    path.parent.mkdir(exist_ok=True)
+    if path.exists():
+        results = json.loads(path.read_text())["results"] | results
+    path.write_text(json.dumps({"retriever": args.retriever, "reranker": args.reranker, "split": args.split,
+                                "limit": args.limit, "results": results}, indent=2))
 
 
 if __name__ == "__main__":

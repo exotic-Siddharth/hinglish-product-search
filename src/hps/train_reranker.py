@@ -19,6 +19,7 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from hps.checkpoint import load_ckpt, save_ckpt
 from hps.hinglish import Hinglishifier
 from hps.metrics import GAINS, ndcg_at_k
 
@@ -63,11 +64,11 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-5)
     ap.add_argument("--max-steps", type=int, default=None)
     ap.add_argument("--val-queries", type=int, default=300, help="val queries for the quick check")
+    ap.add_argument("--ckpt-every", type=int, default=200, help="steps between resumable checkpoints")
     ap.add_argument("--seed", type=int, default=0)
     args = ap.parse_args()
 
     torch.manual_seed(args.seed)
-    rng = random.Random(args.seed)
     tok = AutoTokenizer.from_pretrained(args.base)
     model = AutoModelForSequenceClassification.from_pretrained(args.base, num_labels=1)
     hx = Hinglishifier(words="train")
@@ -80,12 +81,21 @@ def main():
     warmup = max(1, total // 10)
     sched = torch.optim.lr_scheduler.LambdaLR(
         opt, lambda s: min((s + 1) / warmup, max(0.0, (total - s) / (total - warmup))))
-    print(f"{len(train)} pairs, {total} steps; base val judged nDCG "
-          f"en={judged_ndcg(model.eval(), tok, val):.4f}", flush=True)
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    ckpt = out / "ckpt.pt"
+    start = 0
+    if ckpt.exists():
+        start = load_ckpt(ckpt, model, opt, sched)["step"]
+        print(f"resumed from step {start}", flush=True)
+    else:
+        print(f"{len(train)} pairs, {total} steps; base val judged nDCG "
+              f"en={judged_ndcg(model.eval(), tok, val):.4f}", flush=True)
 
     t0 = time.time()
     model.train()
-    for step in range(total):
+    for step in range(start, total):
+        rng = random.Random(args.seed * 10**6 + step)
         b = train.iloc[step * args.batch:(step + 1) * args.batch]
         queries = [hx(q, rng)[0] if rng.random() < args.p_hx else q for q in b["query"]]
         enc = tok(queries, b.text.tolist(), truncation=True, max_length=96, padding=True, return_tensors="pt")
@@ -98,14 +108,16 @@ def main():
         opt.zero_grad()
         if (step + 1) % 100 == 0:
             print(f"step {step + 1}/{total} loss {loss.item():.4f} {time.time() - t0:.0f}s", flush=True)
+        if (step + 1) % args.ckpt_every == 0:
+            save_ckpt(ckpt, model, opt, sched, step=step + 1)
 
     model.eval()
     log = {"val_en": judged_ndcg(model, tok, val), "val_hx": judged_ndcg(model, tok, val, hx=True)}
     print(log, flush=True)
-    out = Path(args.out)
     model.save_pretrained(out)
     tok.save_pretrained(out)
     (out / "train_log.json").write_text(json.dumps({"args": vars(args), "log": log}, indent=2))
+    ckpt.unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

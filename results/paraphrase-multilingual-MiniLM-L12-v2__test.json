@@ -1,0 +1,29 @@
+{
+  "retriever": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
+  "reranker": null,
+  "split": "test",
+  "limit": null,
+  "results": {
+    "en": {
+      "ndcg@10": 0.22009639858751404,
+      "recall@100": 0.44851872306751345,
+      "mrr@10": 0.34842807511986745,
+      "n_queries": 8955,
+      "judged_ndcg@10": 0.6808832123986563
+    },
+    "hx": {
+      "ndcg@10": 0.09559968648162358,
+      "recall@100": 0.23508283122144413,
+      "mrr@10": 0.15547076141222826,
+      "n_queries": 4254,
+      "judged_ndcg@10": 0.6613981305542129
+    },
+    "hx_heldout": {
+      "ndcg@10": 0.0758094385805621,
+      "recall@100": 0.19784260846448923,
+      "mrr@10": 0.12343732895457034,
+      "n_queries": 1160,
+      "judged_ndcg@10": 0.6624237329787427
+    }
+  }
+}
