@@ -46,3 +46,5 @@ run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx
 run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize
 
 python -W ignore -m hps.report | tee ../results/report.md
+python -W ignore -m hps.analysis --examples | tee ../results/analysis.md
+python -W ignore -m hps.figure    # results/hinglish_gap.png, light and dark
