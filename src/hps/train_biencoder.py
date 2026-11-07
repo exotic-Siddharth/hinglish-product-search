@@ -4,14 +4,17 @@ Hinglish query augmentation.
     python -m hps.train_biencoder --out ../models/bi_en   --p-hx 0      (English only)
     python -m hps.train_biencoder --out ../models/bi_hx   --p-hx 0.5    (+ Hinglish)
 
-Each epoch has one example per training query: (query, Exact product,
-Irrelevant product). Loss is in-batch softmax (InfoNCE): a query must score its
-own product above every other product in the batch, including the hard
-negatives. Only one row per query per batch, so another row's product is never
-a hidden positive for the same query.
+Each epoch has one row per training query: the query, one of its Exact products,
+and a hard negative when it has one (an Irrelevant product, else a Complement;
+33% of queries have neither). Loss is in-batch softmax (InfoNCE): a query must
+score its own product above every other product in the batch, hard negatives
+included. One row per query per batch keeps hidden positives rare: about 0.1% of
+in-batch negatives turn out to be judged Exact for that query.
 
-Hinglish augmentation uses only the "train" half of the lexicon (see
-hinglish.py), so the held-out Hindi words stay unseen until evaluation.
+With probability p-hx a row's query goes through the Hinglish generator, using only
+the "train" word families (see hinglish.py), so held-out Hindi words stay unseen
+until evaluation. Most queries contain no lexicon word, so in the default run
+about 22% of training rows actually contain a Hindi word.
 """
 import argparse
 import json
@@ -24,8 +27,9 @@ import pandas as pd
 import torch
 import torch.nn.functional as F
 
+from hps import hinglish
 from hps.checkpoint import load_ckpt, run_fingerprint, save_ckpt
-from hps.hinglish import Hinglishifier, heldout_words
+from hps.hinglish import LEXICON_PATH, PROTECTED_PATH, Hinglishifier, heldout_words
 from hps.metrics import ndcg_at_k
 from hps.retrieval import encode, load_encoder
 
@@ -105,14 +109,14 @@ def main():
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     warmup = max(1, total // 10)
     sched = torch.optim.lr_scheduler.LambdaLR(
-        opt, lambda s: min((s + 1) / warmup, max(0.0, (total - s) / (total - warmup))))
+        opt, lambda s: min((s + 1) / warmup, max(0.0, (total - s) / max(1, total - warmup))))
     print(f"{len(examples)} training queries, {steps_per_epoch} steps/epoch, {total} steps total")
 
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     ckpt = out / "ckpt.pt"
     log, step, t0 = [], 0, time.time()
-    fingerprint = run_fingerprint(vars(args), heldout_words())
+    fingerprint = run_fingerprint(vars(args), heldout_words(), (LEXICON_PATH, PROTECTED_PATH, hinglish.__file__))
     state = load_ckpt(ckpt, model, opt, sched, fingerprint)
     if state:
         log, step = state["log"], state["step"]
@@ -120,8 +124,8 @@ def main():
 
     model.train()
     while step < total:
-        # Order and augmentation depend only on (seed, step), so a resumed run
-        # continues exactly where the interrupted one stopped.
+        # Order and augmentation depend only on (seed, step), and the checkpoint holds the
+        # torch RNG for dropout, so a resumed run continues where the interrupted one stopped.
         epoch, b = divmod(step, steps_per_epoch)
         order = list(range(len(examples)))
         random.Random(args.seed * 1000 + epoch).shuffle(order)
@@ -154,6 +158,7 @@ def main():
             save_ckpt(ckpt, model, opt, sched, fingerprint, step=step, log=log)
 
     model.eval()
+    model.max_seq_length = 64  # the product length; judged_ndcg leaves it at the query length
     model.save(str(out))
     (out / "train_log.json").write_text(json.dumps({"args": vars(args), "log": log}, indent=2))
     ckpt.unlink(missing_ok=True)

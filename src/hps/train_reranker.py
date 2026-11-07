@@ -19,8 +19,9 @@ import torch
 import torch.nn.functional as F
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
+from hps import hinglish
 from hps.checkpoint import load_ckpt, run_fingerprint, save_ckpt
-from hps.hinglish import Hinglishifier, heldout_words
+from hps.hinglish import LEXICON_PATH, PROTECTED_PATH, Hinglishifier, heldout_words
 from hps.metrics import GAINS, ndcg_at_k
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,8 +42,8 @@ def score(model, tok, queries, texts, batch=128):
     out = []
     for i in range(0, len(queries), batch):
         enc = tok(queries[i:i + batch], texts[i:i + batch], truncation=True, max_length=96,
-                  padding=True, return_tensors="pt")
-        out.append(model(**enc).logits.squeeze(-1).float())
+                  padding=True, return_tensors="pt").to(model.device)
+        out.append(model(**enc).logits.squeeze(-1).float().cpu())
     return torch.cat(out).numpy()
 
 
@@ -71,6 +72,7 @@ def main():
     torch.manual_seed(args.seed)
     tok = AutoTokenizer.from_pretrained(args.base)
     model = AutoModelForSequenceClassification.from_pretrained(args.base, num_labels=1)
+    model.to("cuda" if torch.cuda.is_available() else "cpu")
     hx = Hinglishifier(words="train")
 
     train = pairs("train").sample(frac=1.0, random_state=args.seed).head(args.pairs)
@@ -80,12 +82,12 @@ def main():
     opt = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=0.01)
     warmup = max(1, total // 10)
     sched = torch.optim.lr_scheduler.LambdaLR(
-        opt, lambda s: min((s + 1) / warmup, max(0.0, (total - s) / (total - warmup))))
+        opt, lambda s: min((s + 1) / warmup, max(0.0, (total - s) / max(1, total - warmup))))
     out = Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     ckpt = out / "ckpt.pt"
     start = 0
-    fingerprint = run_fingerprint(vars(args), heldout_words())
+    fingerprint = run_fingerprint(vars(args), heldout_words(), (LEXICON_PATH, PROTECTED_PATH, hinglish.__file__))
     state = load_ckpt(ckpt, model, opt, sched, fingerprint)
     if state:
         start = state["step"]
@@ -100,8 +102,9 @@ def main():
         rng = random.Random(args.seed * 10**6 + step)
         b = train.iloc[step * args.batch:(step + 1) * args.batch]
         queries = [hx(q, rng)[0] if rng.random() < args.p_hx else q for q in b["query"]]
-        enc = tok(queries, b.text.tolist(), truncation=True, max_length=96, padding=True, return_tensors="pt")
-        target = torch.tensor([GAINS[l] for l in b.label], dtype=torch.float32)
+        enc = tok(queries, b.text.tolist(), truncation=True, max_length=96, padding=True,
+                  return_tensors="pt").to(model.device)
+        target = torch.tensor([GAINS[l] for l in b.label], dtype=torch.float32, device=model.device)
         loss = F.binary_cross_entropy_with_logits(model(**enc).logits.squeeze(-1), target)
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0)

@@ -54,7 +54,7 @@ def test_training_augmentation_never_uses_heldout_words():
     rng = random.Random(0)
     for q in ["black shoes for women", "small water bottle", "kids table and chairs"] * 50:
         _, _, used = h(q, rng)
-        assert not any(map(is_heldout, used))
+        assert used and not any(is_heldout(word) for word, _ in used)
 
 
 def test_no_heldout_hindi_word_is_reachable_from_training():
@@ -80,20 +80,53 @@ def test_no_heldout_hindi_word_is_reachable_from_training():
 
 def test_word_families_stay_together():
     # big/large share a Hindi word, man/men are inflections, kaala/kala are spellings.
-    for a, b in (("big", "large"), ("man", "men"), ("shoe", "shoes"), ("hot", "warm")):
+    for a, b in (("big", "large"), ("man", "men"), ("shoe", "shoes"), ("toy", "toys")):
         assert is_heldout(a) == is_heldout(b)
     assert root("kaala") == root("kala")
     assert root("mard") == root("mardon")
 
 
 def test_grammar_rules():
-    h = Hinglishifier(p_word=0.0, p_rule=1.0, p_reorder=0.0, p_frame=0.0)
+    h = Hinglishifier(protected=set(), p_word=0.0, p_rule=1.0, p_reorder=0.0, p_frame=0.0)
     rng = random.Random(0)
     assert h("shoes for men", rng)[0] == "shoes men ke liye"
     assert h("set of 4 cups", rng)[0] == "4 ka set cups"
     out = h("bottle under 20", rng)[0]
     assert out in ("bottle 20 se kam", "bottle 20 ke andar")
     assert h("toys for 3 year old boys", rng)[0].startswith("toys 3 saal")
+    assert h("organizer under sink", rng)[0] == "organizer sink ke neeche"
+
+
+def test_rules_keep_the_meaning():
+    h = Hinglishifier(protected=set(), p_word=0.0, p_rule=1.0, p_reorder=0.0, p_frame=0.0)
+    rng = random.Random(0)
+    # Hindi negates after the excluded item: "laptop not chromebook" must not say "not laptop".
+    assert h("laptop not chromebook", rng)[0] in ("laptop chromebook nahi", "laptop chromebook nahin")
+    # The purpose ends at the person; attributes after it stay with the product.
+    assert h("boots for women waterproof", rng)[0] == "boots women ke liye waterproof"
+    # "looking for" is a verb, and "under" only means beneath for a place.
+    assert h("looking for red dress", rng)[0] == "looking for red dress"
+    assert h("under layers for women", rng)[0] == "under layers women ke liye"
+    # "without" excludes only the thing, not the size that follows.
+    assert h("chairs without arms 300 lb", rng)[0].endswith("300 lb")
+
+
+def test_brand_phrases_are_never_translated_or_parsed():
+    lexicon = {"black": ["kala"], "shirt": ["kameez"]}
+    h = Hinglishifier(lexicon, protected={("under", "armour"), ("black", "and", "decker")},
+                      p_word=1.0, p_rule=1.0, p_frame=0.0, p_noise=0.0)
+    rng = random.Random(0)
+    assert h("under armour shirt", rng)[0] == "under armour kameez"
+    assert h("black & decker drill", rng)[0] == "black & decker drill"
+    assert h("black shirt", rng)[0] == "kala kameez"
+
+
+def test_oblique_plural_gets_a_postposition():
+    h = Hinglishifier({"girls": ["ladkiyon"]}, protected=set(), p_word=1.0, p_rule=1.0,
+                      p_reorder=0.0, p_frame=0.0, p_noise=0.0)
+    rng = random.Random(0)
+    assert h("hoodie girls", rng)[0] == "hoodie ladkiyon ke liye"
+    assert h("hoodie for girls", rng)[0] == "hoodie ladkiyon ke liye"
 
 
 def test_generator_is_deterministic_given_seed():

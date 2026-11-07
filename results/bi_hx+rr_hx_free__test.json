@@ -1,0 +1,22 @@
+{
+  "retriever": "../models/bi_hx",
+  "reranker": "../models/rr_hx",
+  "split": "test",
+  "limit": null,
+  "results": {
+    "llm": {
+      "ndcg@10": 0.27781238535014807,
+      "recall@100": 0.522108281912481,
+      "mrr@10": 0.3792275132275132,
+      "n_queries": 150,
+      "judged_ndcg@10": 0.7463456949972863
+    },
+    "llm_en": {
+      "ndcg@10": 0.46319477057182573,
+      "recall@100": 0.7033789821654568,
+      "mrr@10": 0.6379656084656085,
+      "n_queries": 150,
+      "judged_ndcg@10": 0.7724988659089708
+    }
+  }
+}
