@@ -31,8 +31,9 @@ from hps.prepare import ENGLISH_MIN_COUNT, hindi_swaps
 ROOT = Path(__file__).resolve().parents[2]
 PER_QUERY = ROOT / "results" / "per_query"
 SYSTEMS = [("bm25-stem", "BM25 + stemming"), ("bi_en", "Fine-tuned, English only"),
-           ("bi_en+rewrite", "Rewrite, then English model"), ("bi_hx", "Fine-tuned + augmentation")]
-FREE_SYSTEMS = SYSTEMS + [("bi_hx+rr_hx_free", "+ reranker")]
+           ("bi_hx", "Fine-tuned + augmentation"), ("bm25-stem+rewrite", "Rewrite, then BM25"),
+           ("hybrid_bi_hx+rewrite", "Rewrite, then fused")]
+FREE_SYSTEMS = SYSTEMS + [("hybrid_bi_hx+rr_hx+rewrite_free", "Rewrite, fused, reranked")]
 GRAMMAR_WORDS = PARTICLES | ALWAYS_SEEN | {"ke", "liye", "ka", "ki", "wala", "wali", "bina", "se", "ko",
                                            "mein", "aur", "nahi", "wale"}
 LABELS = {"E": "Exact", "S": "Substitute", "C": "Complement", "I": "Irrelevant"}

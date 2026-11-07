@@ -1,7 +1,7 @@
 """Search API and demo page.
 
     cd src
-    python -m hps.serve --retriever ../models/bi_hx --reranker ../models/rr_hx
+    python -m hps.serve --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize --hybrid --rewrite
     # open http://127.0.0.1:8000  (or GET /search?q=mardon+ke+liye+joote)
 """
 import argparse
@@ -10,6 +10,8 @@ import time
 
 import numpy as np
 
+from hps.bm25 import BM25
+from hps.fusion import fuse
 from hps.retrieval import (
     DenseIndex,
     corpus_embeddings,
@@ -18,27 +20,41 @@ from hps.retrieval import (
     load_encoder,
     load_reranker,
 )
+from hps.rewrite import rewrite as rewrite_query
+
+FUSION_DEPTH = 100  # each retriever's top 100 goes into the fusion, as in hps.evaluate
 
 
 class Searcher:
-    """Two-stage search: bi-encoder + FAISS over the catalogue, then an optional
-    cross-encoder reranks the top `rerank_k`."""
+    """The search path: optionally rewrite known Hindi words to English, retrieve with the
+    bi-encoder + FAISS (fused with stemmed BM25 when hybrid), then optionally rerank the
+    top `rerank_k` with a cross-encoder."""
 
-    def __init__(self, retriever, reranker=None, rerank_k=50, quantize=False, device=None):
+    def __init__(self, retriever, reranker=None, rerank_k=50, quantize=False, device=None, hybrid=False,
+                 rewrite=False):
         self.products = eval_corpus()
         self.texts = self.products["text"].tolist()
         self.ids = self.products["product_id"].tolist()
         self.model = load_encoder(retriever, device=device)
         self.index = DenseIndex(corpus_embeddings(self.model, retriever, self.texts))
+        self.bm25 = BM25(stem=True).fit(self.texts) if hybrid else None
         self.cross = load_reranker(reranker, quantize, device=device) if reranker else None
-        self.rerank_k = rerank_k
+        self.rerank_k, self.rewrite = rerank_k, rewrite
 
     def search(self, query, k=10):
         t0 = time.perf_counter()
+        query = rewrite_query(query) if self.rewrite else query
         q = encode(self.model, [query])
         t1 = time.perf_counter()
-        scores, idx = self.index.search(q, max(k, self.rerank_k if self.cross else k))
-        scores, idx = scores[0], idx[0]
+        depth = max(k, self.rerank_k if self.cross else k)
+        if self.bm25 is None:
+            scores, idx = self.index.search(q, depth)
+        else:
+            _, dense = self.index.search(q, FUSION_DEPTH)
+            s, lexical = self.bm25.search([query], FUSION_DEPTH)
+            scores, idx = fuse([np.where(s > 0, lexical, -1), dense], FUSION_DEPTH)
+        scores, idx = scores[0][:depth], idx[0][:depth]
+        scores, idx = scores[idx >= 0], idx[idx >= 0]
         t2 = time.perf_counter()
         if self.cross:
             scores = self.cross.predict([(query, self.texts[i]) for i in idx], batch_size=64)
@@ -87,11 +103,14 @@ def main():
     ap.add_argument("--retriever", default="../models/bi_hx")
     ap.add_argument("--reranker", default=None)
     ap.add_argument("--quantize", action="store_true")
+    ap.add_argument("--hybrid", action="store_true", help="fuse the retriever with stemmed BM25")
+    ap.add_argument("--rewrite", action="store_true", help="rewrite known Hindi words to English first")
     ap.add_argument("--port", type=int, default=8000)
     args = ap.parse_args()
     import uvicorn
-    uvicorn.run(make_app(Searcher(args.retriever, args.reranker, quantize=args.quantize)),
-                host="127.0.0.1", port=args.port)
+    searcher = Searcher(args.retriever, args.reranker, quantize=args.quantize, hybrid=args.hybrid,
+                        rewrite=args.rewrite)
+    uvicorn.run(make_app(searcher), host="127.0.0.1", port=args.port)
 
 
 if __name__ == "__main__":

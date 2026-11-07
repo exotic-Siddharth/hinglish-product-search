@@ -199,3 +199,19 @@ def test_retrieval_metrics_conventions():
     assert m["condensed_ndcg@10"] == pytest.approx(1.0)
     assert m["judged@10"] == pytest.approx(1 / 3)
     assert retrieval_metrics(["a"], {"a": "S"}) is None
+
+
+def test_rank_fusion_sums_reciprocal_ranks_and_skips_empty_slots():
+    from hps.fusion import fuse
+    lexical = np.array([[3, 1, -1]])  # -1: no third product shares a word with the query
+    dense = np.array([[1, 2, 3]])
+    scores, rows = fuse([lexical, dense], 4)
+    assert rows[0].tolist() == [1, 3, 2, -1]  # 1/62 + 1/61 > 1/61 + 1/63 > 1/62
+    assert scores[0, 0] == pytest.approx(1 / 62 + 1 / 61)
+
+
+def test_fused_judged_scores_leave_ties_to_the_other_system():
+    from hps.fusion import fuse_scores
+    s = fuse_scores([[0.0, 0.0, 2.0], [0.9, 0.5, 0.1]])  # BM25 ties products 0 and 1
+    assert s[0] > s[1]
+    assert fuse_scores([[1.0, 1.0]])[0] == fuse_scores([[1.0, 1.0]])[1]

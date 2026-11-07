@@ -3,6 +3,11 @@
     python -m hps.evaluate --retriever bm25
     python -m hps.evaluate --retriever bm25-stem --rewrite
     python -m hps.evaluate --retriever ../models/bi_hx --reranker ../models/rr_hx --limit 2000
+    python -m hps.evaluate --retriever hybrid:../models/bi_hx --rewrite
+
+Retrievers: bm25, bm25-stem (plural stemming), a sentence-transformers model, or
+hybrid:<model>, which fuses stemmed BM25 and that model by reciprocal rank. --rewrite
+maps the Hindi words of the Hinglish sets back to English first (hps/rewrite.py).
 
 Query sets, all built from the same ESCI test queries. Each Hinglish set has an
 "_en" twin with the English originals of exactly the same queries, so a drop is
@@ -33,6 +38,7 @@ import numpy as np
 import pandas as pd
 
 from hps.bm25 import BM25
+from hps.fusion import fuse, fuse_scores
 from hps.metrics import ndcg_at_k, retrieval_metrics
 from hps.retrieval import (
     DenseIndex,
@@ -79,8 +85,10 @@ def query_sets(split="test", limit=None):
 
 class Retriever:
     def __init__(self, name, products):
-        self.name, self.texts = name, products["text"].tolist()
-        if name in ("bm25", "bm25-stem"):
+        self.name, self.texts, self.parts = name, products["text"].tolist(), None
+        if name.startswith("hybrid:"):  # stemmed BM25 + a dense model, fused by rank
+            self.parts = [Retriever("bm25-stem", products), Retriever(name.removeprefix("hybrid:"), products)]
+        elif name in ("bm25", "bm25-stem"):
             self.bm25 = BM25(stem=name == "bm25-stem").fit(self.texts)
         else:
             self.model = load_encoder(name)
@@ -88,12 +96,17 @@ class Retriever:
             self.index = DenseIndex(self.emb)
 
     def search(self, queries, k=100):
+        if self.parts:
+            (s, lexical), (_, dense) = (p.search(queries, k) for p in self.parts)
+            return fuse([np.where(s > 0, lexical, -1), dense], k)  # BM25 0: not one word in common
         if self.name.startswith("bm25"):
             return self.bm25.search(queries, k)
         return self.index.search(encode(self.model, queries), k)
 
     def score(self, query, doc_idx):
         """Scores of specific catalogue rows for one query (judged setting)."""
+        if self.parts:
+            return fuse_scores([p.score(query, doc_idx) for p in self.parts])
         if self.name.startswith("bm25"):
             return self.bm25.score(query, doc_idx)
         return self.emb[doc_idx] @ encode(self.model, [query])[0]
@@ -118,7 +131,8 @@ def git_commit():
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--retriever", default="bm25", help="bm25, bm25-stem, or a sentence-transformers model")
+    ap.add_argument("--retriever", default="bm25",
+                    help="bm25, bm25-stem, a sentence-transformers model, or hybrid:<model>")
     ap.add_argument("--reranker", default=None)
     ap.add_argument("--rerank-k", type=int, default=50)
     ap.add_argument("--quantize", action="store_true", help="int8 reranker")
@@ -128,7 +142,9 @@ def main():
     ap.add_argument("--name", default=None)
     ap.add_argument("--sets", default=None, help="comma-separated query sets to run (default: all)")
     args = ap.parse_args()
-    name = args.name or (Path(args.retriever).name
+    base = Path(args.retriever.removeprefix("hybrid:")).name
+    base = f"hybrid_{base}" if args.retriever.startswith("hybrid:") else base
+    name = args.name or (base
                          + (f"+{Path(args.reranker).name}" if args.reranker else "")
                          + ("_int8" if args.quantize else "") + ("+rewrite" if args.rewrite else ""))
 
@@ -154,7 +170,7 @@ def main():
             qs = {q: rewrite(text) for q, text in qs.items()}
         qids = list(qs)
         _, idx = ret.search([qs[q] for q in qids], k=100)
-        runs = {q: [pids[i] for i in row] for q, row in zip(qids, idx)}
+        runs = {q: [pids[i] for i in row if i >= 0] for q, row in zip(qids, idx)}
         if cross:
             runs = rerank(cross, qs, runs, ret.texts, pid_index, args.rerank_k)
 

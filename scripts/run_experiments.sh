@@ -31,19 +31,32 @@ run hps.evaluate --retriever intfloat/multilingual-e5-small
 run hps.evaluate --retriever ../models/bi_en
 run hps.evaluate --retriever ../models/bi_en --rewrite
 run hps.evaluate --retriever ../models/bi_hx
+run hps.evaluate --retriever ../models/bi_hx --rewrite
+# stemmed BM25 + a dense model, fused by reciprocal rank
+run hps.evaluate --retriever hybrid:../models/bi_hx
+run hps.evaluate --retriever hybrid:../models/bi_en --rewrite
+run hps.evaluate --retriever hybrid:../models/bi_hx --rewrite
 
 # 3. reranking, on a 2,000-query subset (cross-encoders are slow on a CPU)
 SUB=en,hx,hx_en,unseen,unseen_en
+FREE=llm,llm_en,hand,hand_en
 run hps.evaluate --retriever ../models/bi_hx --limit 2000 --sets $SUB --name bi_hx_2k
 run hps.evaluate --retriever ../models/bi_hx --reranker cross-encoder/ms-marco-MiniLM-L6-v2 --limit 2000 --sets $SUB
 run hps.evaluate --retriever ../models/bi_hx --reranker ../models/rr_hx --limit 2000 --sets $SUB
 run hps.evaluate --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize --limit 2000 --sets $SUB
-run hps.evaluate --retriever ../models/bi_hx --reranker ../models/rr_hx --sets llm,llm_en,hand,hand_en --name bi_hx+rr_hx_free
+run hps.evaluate --retriever ../models/bi_hx --reranker ../models/rr_hx --sets $FREE --name bi_hx+rr_hx_free
+# the full pipeline: rewrite, fused retrieval, reranker
+R="--retriever hybrid:../models/bi_hx --rewrite"
+run hps.evaluate $R --limit 2000 --sets $SUB --name hybrid_bi_hx+rewrite_2k
+run hps.evaluate $R --reranker ../models/rr_hx --limit 2000 --sets $SUB
+run hps.evaluate $R --reranker ../models/rr_hx --quantize --limit 2000 --sets $SUB
+run hps.evaluate $R --reranker ../models/rr_hx --sets $FREE --name hybrid_bi_hx+rr_hx+rewrite_free
 
 # 4. latency, one query at a time on the CPU
 run hps.latency --retriever ../models/bi_hx
 run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx
 run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize
+run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize --hybrid --rewrite
 
 python -W ignore -m hps.report | tee ../results/report.md
 python -W ignore -m hps.analysis --examples | tee ../results/analysis.md

@@ -27,14 +27,22 @@ ROWS = [  # (results name, label)
     ("multilingual-e5-small", "Multilingual E5-small (retrieval), pre-trained"),
     ("bi_en", "MiniLM-L6 fine-tuned on English ESCI"),
     ("bi_en+rewrite", "Dictionary rewrite, then the English fine-tuned model"),
-    ("bi_hx", "**MiniLM-L6 fine-tuned + Hinglish augmentation**"),
+    ("bi_hx", "MiniLM-L6 fine-tuned + Hinglish augmentation"),
+    ("bi_hx+rewrite", "Dictionary rewrite, then the augmented model"),
+    ("hybrid_bi_hx", "Stemmed BM25 + augmented model, rank fusion"),
+    ("hybrid_bi_en+rewrite", "Rewrite, then stemmed BM25 + English fine-tuned model, fused"),
+    ("hybrid_bi_hx+rewrite", "**Rewrite, then stemmed BM25 + augmented model, fused**"),
 ]
-FREE_ROWS = ROWS + [("bi_hx+rr_hx_free", "**Fine-tuned retriever + fine-tuned reranker**")]
+FREE_ROWS = ROWS + [("bi_hx+rr_hx_free", "Augmented model + fine-tuned reranker"),
+                    ("hybrid_bi_hx+rr_hx+rewrite_free", "**Rewrite, fused retrieval, fine-tuned reranker**")]
 RERANK_ROWS = [
-    ("bi_hx_2k", "Fine-tuned retriever (+ Hinglish augmentation)"),
+    ("bi_hx_2k", "Augmented retriever"),
     ("bi_hx+ms-marco-MiniLM-L6-v2", "+ pre-trained cross-encoder (MS MARCO)"),
     ("bi_hx+rr_hx", "+ fine-tuned cross-encoder (+ Hinglish augmentation)"),
     ("bi_hx+rr_hx_int8", "+ fine-tuned cross-encoder, int8"),
+    ("hybrid_bi_hx+rewrite_2k", "Rewrite, then stemmed BM25 + augmented retriever, fused"),
+    ("hybrid_bi_hx+rr_hx+rewrite", "**+ fine-tuned cross-encoder**"),
+    ("hybrid_bi_hx+rr_hx_int8+rewrite", "+ fine-tuned cross-encoder, int8 (the served path)"),
 ]
 COMPARISONS = [  # (model A, model B, query set, metric, what A minus B measures)
     ("bi_hx", "bi_en", "hx", "ndcg@10", "Augmentation, on generated Hinglish"),
@@ -52,6 +60,22 @@ COMPARISONS = [  # (model A, model B, query set, metric, what A minus B measures
     ("bi_hx+rr_hx", "bi_hx_2k", "hx", "ndcg@10", "Fine-tuned reranker, generated Hinglish (subset)"),
     ("bi_hx+rr_hx", "bi_hx+ms-marco-MiniLM-L6-v2", "hx", "ndcg@10", "Fine-tuning the reranker, generated Hinglish"),
     ("bi_hx+rr_hx_int8", "bi_hx+rr_hx", "hx", "ndcg@10", "int8 vs full-precision reranker, generated Hinglish"),
+    ("hybrid_bi_hx", "bi_hx", "en", "ndcg@10", "Rank fusion with stemmed BM25, English"),
+    ("hybrid_bi_hx", "bi_hx", "hx", "ndcg@10", "Rank fusion with stemmed BM25, generated Hinglish"),
+    ("bi_hx+rewrite", "bi_en+rewrite", "llm", "ndcg@10", "Augmentation when both use the rewrite, free-form"),
+    ("hybrid_bi_hx+rewrite", "hybrid_bi_en+rewrite", "en", "ndcg@10", "Augmentation inside the fused pipeline, English"),
+    ("hybrid_bi_hx+rewrite", "hybrid_bi_en+rewrite", "hx", "ndcg@10", "Same, generated Hinglish"),
+    ("hybrid_bi_hx+rewrite", "hybrid_bi_en+rewrite", "unseen", "ndcg@10", "Same, unseen Hindi words"),
+    ("hybrid_bi_hx+rewrite", "hybrid_bi_en+rewrite", "llm", "ndcg@10", "Same, free-form Hinglish"),
+    ("hybrid_bi_hx+rewrite", "bm25-stem+rewrite", "hx", "ndcg@10", "Fused pipeline vs rewrite + BM25, generated Hinglish"),
+    ("hybrid_bi_hx+rewrite", "bm25-stem+rewrite", "llm", "ndcg@10", "Fused pipeline vs rewrite + BM25, free-form"),
+    ("hybrid_bi_hx+rewrite", "bm25-stem", "unseen", "ndcg@10", "Fused pipeline vs stemmed BM25, unseen Hindi words"),
+    ("hybrid_bi_hx+rr_hx+rewrite", "hybrid_bi_hx+rewrite_2k", "en", "ndcg@10",
+     "Reranker on the fused pipeline, English (subset)"),
+    ("hybrid_bi_hx+rr_hx+rewrite", "hybrid_bi_hx+rewrite_2k", "hx", "ndcg@10",
+     "Reranker on the fused pipeline, generated Hinglish (subset)"),
+    ("hybrid_bi_hx+rr_hx_int8+rewrite", "hybrid_bi_hx+rr_hx+rewrite", "hx", "ndcg@10",
+     "int8 vs full-precision reranker in the fused pipeline, generated Hinglish"),
 ]
 
 
@@ -135,7 +159,8 @@ def comparison_table():
 
 def latency_table():
     labels = {"bi_hx": "Retriever only", "bi_hx+rr_hx": "Retriever + reranker (top 50)",
-              "bi_hx+rr_hx_int8": "Retriever + int8 reranker (top 50)"}
+              "bi_hx+rr_hx_int8": "Retriever + int8 reranker (top 50)",
+              "hybrid_bi_hx+rr_hx_int8+rewrite": "Rewrite + fused retrieval + int8 reranker (served)"}
     lines = ["| Path | Encode p50 | Search p50 | Rerank p50 | Total p50 | Total p95 |", "|---|---|---|---|---|---|"]
     for name, label in labels.items():
         path = RESULTS / f"latency__{name}.json"

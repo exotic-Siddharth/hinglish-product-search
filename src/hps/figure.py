@@ -17,9 +17,10 @@ from matplotlib.ticker import MultipleLocator
 
 ROOT = Path(__file__).resolve().parents[2]
 SYSTEMS = [("bm25-stem", "BM25 + stemming"), ("multilingual-e5-small", "Multilingual E5, pre-trained"),
-           ("bi_en", "Fine-tuned, English only"), ("bi_en+rewrite", "Rewrite to English, then that model"),
-           ("bi_hx", "Fine-tuned + Hinglish augmentation")]
-FOCUS = "bi_hx"
+           ("bi_en", "Fine-tuned, English only"), ("bi_hx", "Fine-tuned + Hinglish augmentation"),
+           ("bm25-stem+rewrite", "Rewrite to English, then BM25"),
+           ("hybrid_bi_hx+rewrite", "Rewrite, then BM25 + augmented, fused")]
+FOCUS = "hybrid_bi_hx+rewrite"
 SETS = [("hx", "Generated Hinglish"), ("unseen", "Only unseen Hindi words"), ("llm", "Free-form, LLM-written")]
 THEMES = {  # one hue in two validated shades (light: steps 250/550, dark: 600/250), recessive chrome
     "light": {"surface": "#fcfcfb", "ink": "#0b0b0b", "ink2": "#52514e", "muted": "#898781", "grid": "#e1e0d9",
@@ -41,7 +42,7 @@ def load(results):
 def draw(res, theme, path):
     t = THEMES[theme]
     plt.rcParams.update({"font.family": ["Segoe UI", "DejaVu Sans"], "font.size": 9.5})
-    fig, axes = plt.subplots(1, len(SETS), sharey=True, figsize=(11, 3.7), facecolor=t["surface"])
+    fig, axes = plt.subplots(1, len(SETS), sharey=True, figsize=(11, 4.1), facecolor=t["surface"])
     names = [n for n, _ in SYSTEMS if n in res]
     labels = dict(SYSTEMS)
     ys = {n: len(names) - i for i, n in enumerate(names)}
