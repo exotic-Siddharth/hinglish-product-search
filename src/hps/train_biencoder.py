@@ -14,7 +14,7 @@ in-batch negatives turn out to be judged Exact for that query.
 With probability p-hx a row's query goes through the Hinglish generator, using only
 the "train" word families (see hinglish.py), so held-out Hindi words stay unseen
 until evaluation. Most queries contain no lexicon word, so in the default run
-about 22% of training rows actually contain a Hindi word.
+about 19% of training rows actually contain a Hindi word.
 """
 import argparse
 import json
