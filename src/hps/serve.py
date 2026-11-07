@@ -24,13 +24,13 @@ class Searcher:
     """Two-stage search: bi-encoder + FAISS over the catalogue, then an optional
     cross-encoder reranks the top `rerank_k`."""
 
-    def __init__(self, retriever, reranker=None, rerank_k=50, quantize=False):
+    def __init__(self, retriever, reranker=None, rerank_k=50, quantize=False, device=None):
         self.products = eval_corpus()
         self.texts = self.products["text"].tolist()
         self.ids = self.products["product_id"].tolist()
-        self.model = load_encoder(retriever)
+        self.model = load_encoder(retriever, device=device)
         self.index = DenseIndex(corpus_embeddings(self.model, retriever, self.texts))
-        self.cross = load_reranker(reranker, quantize) if reranker else None
+        self.cross = load_reranker(reranker, quantize, device=device) if reranker else None
         self.rerank_k = rerank_k
 
     def search(self, query, k=10):
@@ -55,23 +55,23 @@ PAGE = """<!doctype html><meta charset="utf-8"><title>Hinglish product search</t
 <style>body{{font:15px system-ui;max-width:760px;margin:40px auto;padding:0 16px}}
 input{{width:75%;font-size:16px;padding:8px}}li{{margin:8px 0}}small{{color:#666}}</style>
 <h2>Hinglish product search</h2>
-<form><input name="q" value="{q}" placeholder="e.g. mardon ke liye kale joote" autofocus> <button>Search</button></form>
+<form><input name="q" value="{q}" placeholder="e.g. bachon ke liye pani wali botal" autofocus> <button>Search</button></form>
 <p><small>{timing}</small></p><ol>{items}</ol>"""
 
 
 def make_app(searcher):
-    from fastapi import FastAPI
+    from fastapi import FastAPI, Query
     from fastapi.responses import HTMLResponse
 
     app = FastAPI(title="Hinglish product search")
 
     @app.get("/search")
-    def search(q: str, k: int = 10):
+    def search(q: str = Query(min_length=1, max_length=200), k: int = Query(10, ge=1, le=50)):
         hits, ms = searcher.search(q, k)
         return {"query": q, "results": hits, "latency": ms}
 
     @app.get("/", response_class=HTMLResponse)
-    def page(q: str = ""):
+    def page(q: str = Query("", max_length=200)):
         if not q:
             return PAGE.format(q="", timing="", items="")
         hits, ms = searcher.search(q, 10)

@@ -173,3 +173,29 @@ def test_checkpoint_restores_model_optimizer_and_step(tmp_path):
     assert torch.equal(m.weight, m2.weight)
     assert s2.last_epoch == 1
     assert o2.state_dict()["state"][0]["step"] == o.state_dict()["state"][0]["step"]
+
+
+def test_s_stemmer_only_strips_plurals():
+    from hps.bm25 import s_stem
+    assert [s_stem(w) for w in ("shoes", "batteries", "glass", "bus", "toes", "boxes")] == \
+        ["shoe", "battery", "glass", "bus", "toe", "boxe"]
+
+
+def test_rewrite_knows_only_training_words():
+    from hps.rewrite import phrase_table, rewrite
+    lex = load_lexicon()
+    held_forms = {tuple(v.split()) for w in lex if is_heldout(w) for v in lex[w]}
+    trained_only = {form for form in held_forms if phrase_table().get(form) in {w for w in lex if is_heldout(w)}}
+    assert not trained_only
+    out = rewrite("mujhe mardon ke liye kaala chashma chahiye")
+    assert "for" in out and "mujhe" not in out and "chahiye" not in out
+
+
+def test_retrieval_metrics_conventions():
+    from hps.metrics import retrieval_metrics
+    qrel = {"a": "E", "b": "I"}
+    m = retrieval_metrics(["x", "a", "y"], qrel)  # x and y are unjudged
+    assert m["ndcg@10"] == pytest.approx(1 / np.log2(3))
+    assert m["condensed_ndcg@10"] == pytest.approx(1.0)
+    assert m["judged@10"] == pytest.approx(1 / 3)
+    assert retrieval_metrics(["a"], {"a": "S"}) is None

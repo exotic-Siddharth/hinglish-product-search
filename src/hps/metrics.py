@@ -41,19 +41,21 @@ def mrr_at_k(ranked_ids, qrel, k=10, label="E"):
     return 0.0
 
 
-def summarise(runs, qrels, ks=(10,), recall_ks=(100,)):
-    """runs: {query_id: ranked ids}. Returns mean metrics over queries that
-    have at least one Exact product (others have undefined recall/MRR)."""
-    out = {f"ndcg@{k}": [] for k in ks}
-    out.update({f"recall@{k}": [] for k in recall_ks})
-    out["mrr@10"] = []
-    for qid, ranked in runs.items():
-        qrel = qrels[qid]
-        if "E" not in qrel.values():
-            continue
-        for k in ks:
-            out[f"ndcg@{k}"].append(ndcg_at_k(ranked, qrel, k))
-        for k in recall_ks:
-            out[f"recall@{k}"].append(recall_at_k(ranked, qrel, k))
-        out["mrr@10"].append(mrr_at_k(ranked, qrel, 10))
-    return {m: float(np.mean(v)) for m, v in out.items()} | {"n_queries": len(out["mrr@10"])}
+def retrieval_metrics(ranked, qrel):
+    """Metrics of one ranked list, or None if the query has no Exact product (its
+    recall and MRR are undefined, so it is left out of every retrieval mean).
+
+    Most retrieved products were judged for other queries, not this one, so two
+    conventions are reported: ndcg@10 counts unjudged products as irrelevant, and
+    condensed_ndcg@10 removes them first (Sakai 2007). judged@10 says how much of
+    the top 10 is judged at all."""
+    if "E" not in qrel.values():
+        return None
+    return {
+        "ndcg@10": ndcg_at_k(ranked, qrel, 10),
+        "condensed_ndcg@10": ndcg_at_k([p for p in ranked if p in qrel], qrel, 10),
+        "judged@10": float(np.mean([p in qrel for p in ranked[:10]])),
+        "recall@50": recall_at_k(ranked, qrel, 50),
+        "recall@100": recall_at_k(ranked, qrel, 100),
+        "mrr@10": mrr_at_k(ranked, qrel, 10),
+    }

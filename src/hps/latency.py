@@ -29,7 +29,7 @@ def main():
     q = pd.read_parquet(ROOT / "data" / "processed" / "queries.parquet")
     q = q[(q.split == "test") & (q.n_sub > 0)]
     queries = random.Random(0).sample(q.query_hx.tolist(), args.n)
-    s = Searcher(args.retriever, args.reranker, quantize=args.quantize)
+    s = Searcher(args.retriever, args.reranker, quantize=args.quantize, device="cpu")
     for x in queries[:10]:
         s.search(x)  # warm-up
     rows = [s.search(x)[1] for x in queries]
@@ -41,7 +41,7 @@ def main():
     name = Path(args.retriever).name + (f"+{Path(args.reranker).name}" if args.reranker else "") \
         + ("_int8" if args.quantize else "")
     (ROOT / "results" / f"latency__{name}.json").write_text(json.dumps(
-        {"threads": args.threads, "n": args.n, **stats}, indent=2))
+        {"device": "cpu", "threads": args.threads, "n": args.n, **stats}, indent=2))
 
 
 if __name__ == "__main__":

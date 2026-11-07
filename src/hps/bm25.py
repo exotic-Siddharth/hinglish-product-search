@@ -12,12 +12,28 @@ def tokenize(text):
     return TOKEN.findall(text.lower())
 
 
+def s_stem(word):
+    """Harman's S-stemmer (1991): only plural endings, so shoe and shoes match."""
+    if word.endswith("ies") and not word.endswith(("eies", "aies")):
+        return word[:-3] + "y"
+    if word.endswith("es") and not word.endswith(("aes", "ees", "oes")):
+        return word[:-1]
+    if word.endswith("s") and not word.endswith(("us", "ss")):
+        return word[:-1]
+    return word
+
+
+def tokenize_stemmed(text):
+    return [s_stem(t) for t in tokenize(text)]
+
+
 class BM25:
-    def __init__(self, k1=1.2, b=0.75):
-        self.k1, self.b = k1, b
+    def __init__(self, k1=1.2, b=0.75, stem=False):
+        self.k1, self.b, self.stem = k1, b, stem
 
     def fit(self, docs):
-        self.vec = CountVectorizer(tokenizer=tokenize, lowercase=False, token_pattern=None)
+        self.vec = CountVectorizer(tokenizer=tokenize_stemmed if self.stem else tokenize,
+                                   lowercase=False, token_pattern=None)
         tf = self.vec.fit_transform(docs).tocsc().astype(np.float32)
         n_docs = tf.shape[0]
         df = np.diff(tf.indptr)
