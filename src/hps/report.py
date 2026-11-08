@@ -59,6 +59,10 @@ COMPARISONS = [  # (model A, model B, query set, metric, what A minus B measures
     ("bi_hx+rr_hx", "bi_hx_2k", "en", "ndcg@10", "Fine-tuned reranker, English (2,000-query subset)"),
     ("bi_hx+rr_hx", "bi_hx_2k", "hx", "ndcg@10", "Fine-tuned reranker, generated Hinglish (subset)"),
     ("bi_hx+rr_hx", "bi_hx+ms-marco-MiniLM-L6-v2", "hx", "ndcg@10", "Fine-tuning the reranker, generated Hinglish"),
+    ("bi_hx+rr_hx", "bi_hx+ms-marco-MiniLM-L6-v2", "en", "judged_ndcg@10", "Fine-tuning the reranker, judged list, English"),
+    ("bi_hx+rr_hx", "bi_hx+ms-marco-MiniLM-L6-v2", "hx", "judged_ndcg@10", "Same, generated Hinglish"),
+    ("bi_hx+ms-marco-MiniLM-L6-v2", "bi_hx_2k", "en", "judged_ndcg@10",
+     "Pre-trained reranker vs no reranker, judged list, English"),
     ("bi_hx+rr_hx_int8", "bi_hx+rr_hx", "hx", "ndcg@10", "int8 vs full-precision reranker, generated Hinglish"),
     ("hybrid_bi_hx", "bi_hx", "en", "ndcg@10", "Rank fusion with stemmed BM25, English"),
     ("hybrid_bi_hx", "bi_hx", "hx", "ndcg@10", "Rank fusion with stemmed BM25, generated Hinglish"),
@@ -74,6 +78,12 @@ COMPARISONS = [  # (model A, model B, query set, metric, what A minus B measures
      "Reranker on the fused pipeline, English (subset)"),
     ("hybrid_bi_hx+rr_hx+rewrite", "hybrid_bi_hx+rewrite_2k", "hx", "ndcg@10",
      "Reranker on the fused pipeline, generated Hinglish (subset)"),
+    ("hybrid_bi_hx+rr_hx+rewrite", "hybrid_bi_hx+rewrite_2k", "hx", "judged_ndcg@10",
+     "Same, judged list"),
+    ("hybrid_bi_hx+rr_hx+rewrite_free", "hybrid_bi_hx+rewrite", "llm", "ndcg@10",
+     "Reranker on the fused pipeline, free-form"),
+    ("hybrid_bi_hx+rr_hx+rewrite_free", "hybrid_bi_hx+rewrite", "llm", "condensed_ndcg@10",
+     "Same, unjudged products removed"),
     ("hybrid_bi_hx+rr_hx_int8+rewrite", "hybrid_bi_hx+rr_hx+rewrite", "hx", "ndcg@10",
      "int8 vs full-precision reranker in the fused pipeline, generated Hinglish"),
 ]
@@ -104,14 +114,16 @@ def cell(r, set_name, metric):
 
 
 def table(rows, cols):
-    """cols: (header, set name, metric). Headers get the set's query count."""
+    """cols: (header, set name, metric). Headers get the set's query count; a set no
+    row has (the hand-written one, until it is filled in) gets no column."""
     counts = {}
     for name, _ in rows:
         for _, set_name, _ in cols:
             r = load(name)
             if r and set_name in r:
                 counts.setdefault(set_name, r[set_name]["n_with_exact"])
-    head = " | ".join(f"{h} ({counts[s]:,})" if s in counts else h for h, s, _ in cols)
+    cols = [c for c in cols if c[1] in counts]
+    head = " | ".join(f"{h} ({counts[s]:,})" for h, s, _ in cols)
     lines = [f"| Model | {head} |", "|---" * (len(cols) + 1) + "|"]
     for name, label in rows:
         r = load(name)

@@ -52,11 +52,8 @@ run hps.evaluate $R --reranker ../models/rr_hx --limit 2000 --sets $SUB
 run hps.evaluate $R --reranker ../models/rr_hx --quantize --limit 2000 --sets $SUB
 run hps.evaluate $R --reranker ../models/rr_hx --sets $FREE --name hybrid_bi_hx+rr_hx+rewrite_free
 
-# 4. latency, one query at a time on the CPU
-run hps.latency --retriever ../models/bi_hx
-run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx
-run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize
-run hps.latency --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize --hybrid --rewrite
+# 4. latency, one query at a time on the CPU: four search paths, interleaved query by query
+run hps.latency
 
 python -W ignore -m hps.report | tee ../results/report.md
 python -W ignore -m hps.analysis --examples | tee ../results/analysis.md
