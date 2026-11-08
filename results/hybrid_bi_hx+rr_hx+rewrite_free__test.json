@@ -1,0 +1,38 @@
+{
+  "retriever": "hybrid:../models/bi_hx",
+  "reranker": "../models/rr_hx",
+  "split": "test",
+  "commit": "068a586",
+  "results": {
+    "llm": {
+      "judged_ndcg@10": 0.7268935612123623,
+      "judged_ndcg": 0.8343756853563241,
+      "ndcg@10": 0.3057801728523717,
+      "condensed_ndcg@10": 0.5691323027979364,
+      "judged@10": 0.316260162601626,
+      "recall@50": 0.5485818221776928,
+      "recall@100": 0.6168695005229249,
+      "mrr@10": 0.4404213446896374,
+      "n_queries": 123,
+      "n_with_exact": 123,
+      "limit": null,
+      "rewrite": true,
+      "queries_md5": "6fc4ab1b402bf407749f80de87b96bbc"
+    },
+    "llm_en": {
+      "judged_ndcg@10": 0.7684597809252346,
+      "judged_ndcg": 0.8647029497723969,
+      "ndcg@10": 0.46653194095480016,
+      "condensed_ndcg@10": 0.7041179081020568,
+      "judged@10": 0.483739837398374,
+      "recall@50": 0.6934874654314571,
+      "recall@100": 0.7715059330544479,
+      "mrr@10": 0.6173054587688734,
+      "n_queries": 123,
+      "n_with_exact": 123,
+      "limit": null,
+      "rewrite": false,
+      "queries_md5": "60cb6add2650c48443e739f0e55805a2"
+    }
+  }
+}

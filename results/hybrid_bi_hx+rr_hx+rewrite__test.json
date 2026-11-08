@@ -1,0 +1,83 @@
+{
+  "retriever": "hybrid:../models/bi_hx",
+  "reranker": "../models/rr_hx",
+  "split": "test",
+  "commit": "068a586",
+  "results": {
+    "en": {
+      "judged_ndcg@10": 0.7514393601491172,
+      "judged_ndcg": 0.8557573856678002,
+      "ndcg@10": 0.45642226085007837,
+      "condensed_ndcg@10": 0.6684133581745582,
+      "judged@10": 0.472,
+      "recall@50": 0.6515054847065733,
+      "recall@100": 0.7331676686279396,
+      "mrr@10": 0.6334095238095238,
+      "n_queries": 2000,
+      "n_with_exact": 2000,
+      "limit": 2000,
+      "rewrite": false,
+      "queries_md5": "64ae32077bceb201d12e518fe02aedbc"
+    },
+    "hx": {
+      "judged_ndcg@10": 0.7491080445538354,
+      "judged_ndcg": 0.8542246824644303,
+      "ndcg@10": 0.41291275552463147,
+      "condensed_ndcg@10": 0.6480875367534287,
+      "judged@10": 0.4416040100250626,
+      "recall@50": 0.6010349549904843,
+      "recall@100": 0.6906219095887988,
+      "mrr@10": 0.5855138839161396,
+      "n_queries": 798,
+      "n_with_exact": 798,
+      "limit": 2000,
+      "rewrite": true,
+      "queries_md5": "b8f09505406f27cc62082b6e42bd421a"
+    },
+    "unseen": {
+      "judged_ndcg@10": 0.7668004865443062,
+      "judged_ndcg": 0.8703817689320434,
+      "ndcg@10": 0.27202754157292425,
+      "condensed_ndcg@10": 0.5959844722694901,
+      "judged@10": 0.3019047619047619,
+      "recall@50": 0.46941700269542047,
+      "recall@100": 0.5763702504112507,
+      "mrr@10": 0.38039682539682546,
+      "n_queries": 105,
+      "n_with_exact": 105,
+      "limit": 2000,
+      "rewrite": true,
+      "queries_md5": "510502bb600de4c4100d534c077e8510"
+    },
+    "hx_en": {
+      "judged_ndcg@10": 0.75632255411509,
+      "judged_ndcg": 0.8591908525604628,
+      "ndcg@10": 0.4444712167262255,
+      "condensed_ndcg@10": 0.6666630116795311,
+      "judged@10": 0.47330827067669173,
+      "recall@50": 0.6289486047814173,
+      "recall@100": 0.7184889334401957,
+      "mrr@10": 0.6237165333969845,
+      "n_queries": 798,
+      "n_with_exact": 798,
+      "limit": 2000,
+      "rewrite": false,
+      "queries_md5": "b063ac6073be1775f28bf7b280873fb5"
+    },
+    "unseen_en": {
+      "judged_ndcg@10": 0.7748859971502496,
+      "judged_ndcg": 0.8783474565257333,
+      "ndcg@10": 0.4172385897923331,
+      "condensed_ndcg@10": 0.6841922771434591,
+      "judged@10": 0.459047619047619,
+      "recall@50": 0.6307734977825789,
+      "recall@100": 0.7118780815391911,
+      "mrr@10": 0.5747883597883597,
+      "n_queries": 105,
+      "n_with_exact": 105,
+      "limit": 2000,
+      "rewrite": false,
+      "queries_md5": "7d8f60b440b33acb0f9f414ddb4b45ef"
+    }
+  }
+}

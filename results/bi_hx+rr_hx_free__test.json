@@ -1,0 +1,38 @@
+{
+  "retriever": "../models/bi_hx",
+  "reranker": "../models/rr_hx",
+  "split": "test",
+  "commit": "8afad70",
+  "results": {
+    "llm": {
+      "judged_ndcg@10": 0.7225383601686988,
+      "judged_ndcg": 0.8317979922720637,
+      "ndcg@10": 0.2373541734329374,
+      "condensed_ndcg@10": 0.48152393402892585,
+      "judged@10": 0.23495934959349593,
+      "recall@50": 0.42177668687678743,
+      "recall@100": 0.5020226169531072,
+      "mrr@10": 0.3260549748354626,
+      "n_queries": 123,
+      "n_with_exact": 123,
+      "limit": null,
+      "rewrite": false,
+      "queries_md5": "d0cd6a4b29bc7a8b04907b11d54a99b3"
+    },
+    "llm_en": {
+      "judged_ndcg@10": 0.7684597809252346,
+      "judged_ndcg": 0.8647029497723969,
+      "ndcg@10": 0.4703027611099598,
+      "condensed_ndcg@10": 0.6817405322733072,
+      "judged@10": 0.4845528455284553,
+      "recall@50": 0.6581474093484375,
+      "recall@100": 0.7345699137516752,
+      "mrr@10": 0.6133726932507421,
+      "n_queries": 123,
+      "n_with_exact": 123,
+      "limit": null,
+      "rewrite": false,
+      "queries_md5": "60cb6add2650c48443e739f0e55805a2"
+    }
+  }
+}
