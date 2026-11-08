@@ -146,7 +146,7 @@
 
 | Path | Encode p50 | Search p50 | Rerank p50 | Total p50 | Total p95 |
 |---|---|---|---|---|---|
-| Retriever only | 33 ms | 14 ms | 0 ms | 51 ms | 1452 ms |
-| Retriever + reranker (top 50) | 31 ms | 14 ms | 1313 ms | 1371 ms | 4473 ms |
-| Retriever + int8 reranker (top 50) | 32 ms | 14 ms | 802 ms | 870 ms | 4138 ms |
-| Rewrite + fused retrieval + int8 reranker (served) | 32 ms | 58 ms | 784 ms | 881 ms | 5348 ms |
+| Retriever only | 14 ms | 8 ms | 0 ms | 22 ms | 36 ms |
+| Retriever + reranker (top 50) | 15 ms | 8 ms | 638 ms | 664 ms | 924 ms |
+| Retriever + int8 reranker (top 50) | 14 ms | 9 ms | 328 ms | 351 ms | 553 ms |
+| Rewrite + fused retrieval + int8 reranker (served) | 13 ms | 26 ms | 316 ms | 355 ms | 526 ms |

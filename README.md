@@ -84,8 +84,8 @@ brackets (all of them: [results/report.md](results/report.md)).
    after reranking free-form queries: −0.030 nDCG@10, but −0.006 with unjudged products
    removed, neither significant.
 8. **int8 is nearly free.** The int8 reranker costs 0.004 nDCG@10 [−0.008, +0.000] and
-   reranks in 0.61 of the time. Reranking 50 products is most of the latency; fusing in
-   BM25 adds a few tens of milliseconds to retrieval.
+   reranks in about half the time (328 ms against 638 ms p50). Reranking 50 products is
+   most of the latency; fusing in BM25 adds about 17 ms to retrieval.
 
 ### Retrieval, full test set
 
@@ -149,14 +149,14 @@ them alike.
 
 | Path | Encode p50 | Search p50 | Rerank p50 | Total p50 | Total p95 |
 |---|---|---|---|---|---|
-| Retriever only | 33 ms | 14 ms | 0 ms | 51 ms | 1452 ms |
-| Retriever + reranker (top 50) | 31 ms | 14 ms | 1313 ms | 1371 ms | 4473 ms |
-| Retriever + int8 reranker (top 50) | 32 ms | 14 ms | 802 ms | 870 ms | 4138 ms |
-| Rewrite + fused retrieval + int8 reranker (served) | 32 ms | 58 ms | 784 ms | 881 ms | 5348 ms |
+| Retriever only | 14 ms | 8 ms | 0 ms | 22 ms | 36 ms |
+| Retriever + reranker (top 50) | 15 ms | 8 ms | 638 ms | 664 ms | 924 ms |
+| Retriever + int8 reranker (top 50) | 14 ms | 9 ms | 328 ms | 351 ms | 553 ms |
+| Rewrite + fused retrieval + int8 reranker (served) | 13 ms | 26 ms | 316 ms | 355 ms | 526 ms |
 
-These times were measured while the laptop was busy with other work, so they are higher
-than on an idle machine; because the paths were interleaved, the comparison between them
-holds.
+Measured on an otherwise idle laptop (CPU load 5% when the run started). The int8
+reranker takes about half the time of the full-precision one. BM25 fusion adds about
+17 ms to search; the rewrite is timed with encoding and costs nothing measurable.
 
 Recall, the unjudged-products check and the judged-list results for every system are in
 [results/report.md](results/report.md).
