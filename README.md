@@ -4,6 +4,10 @@ Product search for queries typed in **Hinglish**, romanised Hindi mixed with Eng
 (`stocking stuffers bado ke liye 10 se kam` for *stocking stuffers for adults under 10*),
 built and evaluated on Amazon's public ESCI shopping dataset.
 
+<img src="assets/demo.gif" width="760" alt="Screen recording of the demo page. Typing 'gents ke liye kaala jacket' returns black men's jackets, shown as searched as 'men for black jacket'; typing 'bachon ke liye pani wali botal' returns kids' water bottles.">
+
+*The served pipeline on a laptop CPU: known Hindi words are rewritten to English ("searched as"), BM25 and the fine-tuned retriever are fused, and a cross-encoder reranks the top 50.*
+
 Code-mixed queries are common in Indian e-commerce: Flipkart reports that around 21% of
 the queries on its platform are code-mixed Hinglish ([Kulkarni et al., 2022](https://arxiv.org/abs/2208.03713)).
 Spelling is not standardised (`safed` / `sufed`, `botal` / `bottal`) and Hindi word order
@@ -346,6 +350,7 @@ pytest -q                         # unit tests, also run by CI on every push
 
 cd src && python -m hps.serve --retriever ../models/bi_hx --reranker ../models/rr_hx --quantize --hybrid --rewrite
 # http://127.0.0.1:8000, or GET /search?q=bachon+ke+liye+pani+ki+botal&k=10
+# assets/demo.gif was recorded from this page by scripts/record_demo.py
 ```
 
 Training is resumable: the retriever checkpoints every 50 steps and the reranker every

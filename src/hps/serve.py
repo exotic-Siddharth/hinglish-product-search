@@ -7,6 +7,7 @@
 import argparse
 import html
 import time
+from urllib.parse import quote_plus
 
 import numpy as np
 
@@ -67,12 +68,49 @@ class Searcher:
         return hits, ms
 
 
-PAGE = """<!doctype html><meta charset="utf-8"><title>Hinglish product search</title>
-<style>body{{font:15px system-ui;max-width:760px;margin:40px auto;padding:0 16px}}
-input{{width:75%;font-size:16px;padding:8px}}li{{margin:8px 0}}small{{color:#666}}</style>
-<h2>Hinglish product search</h2>
-<form><input name="q" value="{q}" placeholder="e.g. bachon ke liye pani wali botal" autofocus> <button>Search</button></form>
-<p><small>{timing}</small></p><ol>{items}</ol>"""
+EXAMPLES = ["gents ke liye kaala jacket", "bachon ke liye pani wali botal", "ladkiyon ke liye gulabi juta",
+            "mardon ke liye joote"]
+
+PAGE = """<!doctype html><html lang="en"><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Hinglish product search</title>
+<style>
+*{{box-sizing:border-box}}
+body{{font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;color:#1f2328;background:#f6f7f9;margin:0}}
+main{{max-width:820px;margin:0 auto;padding:32px 20px 48px}}
+h1{{font-size:24px;margin:0 0 4px}} .sub{{color:#59636e;margin:0 0 18px}}
+form{{display:flex;gap:8px}}
+input{{flex:1;font-size:17px;padding:11px 14px;border:1px solid #c9ced6;border-radius:8px;background:#fff}}
+input:focus{{outline:2px solid #1c5cab;outline-offset:-1px;border-color:#1c5cab}}
+button{{font-size:16px;padding:0 20px;border:0;border-radius:8px;background:#1c5cab;color:#fff;cursor:pointer}}
+.try{{margin:12px 0 0;color:#59636e;font-size:14px}}
+.try a{{display:inline-block;margin:4px 6px 0 0;padding:3px 10px;border:1px solid #c9ced6;border-radius:999px;
+color:#1f2328;text-decoration:none;background:#fff}} .try a:hover{{border-color:#1c5cab;color:#1c5cab}}
+.meta{{margin:22px 0 10px;font-size:14px;color:#59636e}} .meta b{{color:#1f2328}}
+ol{{list-style:none;padding:0;margin:0}}
+li{{display:flex;gap:12px;background:#fff;border:1px solid #e1e4e8;border-radius:8px;padding:11px 14px;margin:0 0 8px}}
+.rank{{color:#59636e;min-width:20px;font-variant-numeric:tabular-nums}}
+.title{{font-weight:500}} .tags{{margin-top:3px;font-size:13px;color:#59636e}}
+.tags span{{margin-right:14px}}
+footer{{margin-top:28px;font-size:13px;color:#59636e}} footer a{{color:#1c5cab}}
+</style>
+<main>
+<h1>Hinglish product search</h1>
+<p class="sub">Search {n_products} Amazon products the way you would type it: Hindi words in English letters, mixed with English.</p>
+<form><input name="q" value="{q}" placeholder="e.g. bachon ke liye pani wali botal" aria-label="Search"
+ spellcheck="false" autocomplete="off" autofocus>
+<button>Search</button></form>
+<p class="try">Try: {examples}</p>
+{results}
+<footer>{pipeline} · <a href="https://github.com/exotic-Siddharth/hinglish-product-search">How it works</a></footer>
+</main></html>"""
+
+
+def product_card(rank, text):
+    """Product texts are 'title | brand: X | color: Y'; show the title and the attributes as tags."""
+    title, *attrs = text.split(" | ")
+    tags = "".join(f"<span>{html.escape(a)}</span>" for a in attrs)
+    return (f'<li><span class="rank">{rank}</span><div><div class="title">{html.escape(title)}</div>'
+            f'<div class="tags">{tags}</div></div></li>')
 
 
 def make_app(searcher):
@@ -80,20 +118,32 @@ def make_app(searcher):
     from fastapi.responses import HTMLResponse
 
     app = FastAPI(title="Hinglish product search")
+    stages = (["rewrite"] if searcher.rewrite else []) + (["BM25 + dense, fused"] if searcher.bm25 else ["dense"])
+    stages += ["cross-encoder rerank"] if searcher.cross else []
+    encode_label = "rewrite + encode" if searcher.rewrite else "encode"
+    pipeline = "Pipeline: " + " → ".join(stages)
+    examples = "".join(f'<a href="/?q={quote_plus(e)}">{html.escape(e)}</a>' for e in EXAMPLES)
+
+    def rewritten(q):
+        return rewrite_query(q) if searcher.rewrite else q
 
     @app.get("/search")
     def search(q: str = Query(min_length=1, max_length=200), k: int = Query(10, ge=1, le=50)):
         hits, ms = searcher.search(q, k)
-        return {"query": q, "results": hits, "latency": ms}
+        return {"query": q, "rewritten": rewritten(q), "results": hits, "latency": ms}
 
     @app.get("/", response_class=HTMLResponse)
     def page(q: str = Query("", max_length=200)):
-        if not q:
-            return PAGE.format(q="", timing="", items="")
-        hits, ms = searcher.search(q, 10)
-        items = "".join(f"<li>{html.escape(h['text'])} <small>({h['score']:.3f})</small></li>" for h in hits)
-        timing = " · ".join(f"{k} {v:.0f}" for k, v in ms.items())
-        return PAGE.format(q=html.escape(q), timing=timing, items=items)
+        results = ""
+        if q.strip():
+            hits, ms = searcher.search(q, 10)
+            as_ = rewritten(q)
+            searched = f" · searched as <b>{html.escape(as_)}</b>" if as_ != " ".join(q.lower().split()) else ""
+            meta = (f'<p class="meta"><b>{sum(ms.values()):.0f} ms</b> ({encode_label} {ms["encode_ms"]:.0f}, '
+                    f'retrieve {ms["search_ms"]:.0f}, rerank {ms["rerank_ms"]:.0f}){searched}</p>')
+            results = meta + "<ol>" + "".join(product_card(i, h["text"]) for i, h in enumerate(hits, 1)) + "</ol>"
+        return PAGE.format(q=html.escape(q), n_products=f"{len(searcher.texts):,}", examples=examples,
+                           results=results, pipeline=pipeline)
 
     return app
 
