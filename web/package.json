@@ -1,0 +1,7 @@
+{
+  "name": "hps-web",
+  "private": true,
+  "type": "module",
+  "description": "In-browser version of the Hinglish Product Search lexical path and its parity check against the Python code",
+  "scripts": { "test": "node --test test_hps.mjs", "parity": "node parity.mjs build" }
+}

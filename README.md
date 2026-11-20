@@ -8,6 +8,11 @@ built and evaluated on Amazon's public ESCI shopping dataset.
 
 *The served pipeline on a laptop CPU: known Hindi words are rewritten to English ("searched as"), BM25 and the fine-tuned retriever are fused, and a cross-encoder reranks the top 50.*
 
+**Live demo, in your browser: [exotic-siddharth.github.io/hinglish-search](https://exotic-siddharth.github.io/hinglish-search/).**
+It runs the model-free part of the pipeline, the dictionary rewrite and stemmed BM25, over a
+40,000-product sample, and shows the results with and without the rewrite next to Amazon's
+relevance labels. [web/](web/) has the JavaScript port and a parity check against the Python code.
+
 Code-mixed queries are common in Indian e-commerce: Flipkart reports that around 21% of
 the queries on its platform are code-mixed Hinglish ([Kulkarni et al., 2022](https://arxiv.org/abs/2208.03713)).
 Spelling is not standardised (`safed` / `sufed`, `botal` / `bottal`) and Hindi word order
@@ -357,6 +362,11 @@ Training is resumable: the retriever checkpoints every 50 steps and the reranker
 200, and a checkpoint is only resumed by a run with the same settings, lexicon, brand
 list and generator code.
 
+The browser demo needs no model: after `python -m hps.prepare`, `PYTHONPATH=src python
+web/export_data.py` writes the product sample, example queries, rewrite table and the Python
+results; `node web/parity.mjs web/build` checks the JavaScript port against them, and
+`node --test web/test_hps.mjs` runs its unit tests.
+
 ## Project layout
 
 ```
@@ -378,6 +388,7 @@ src/hps/
   serve.py            FastAPI app and demo page
   latency.py          per-stage p50/p95 latency on the CPU
 data/                 lexicon, protected compounds, held-out list, free-form sets (see data/README.md)
+web/                  in-browser demo: hps.js (rewrite + stemmed BM25 port), index.html, export and parity scripts
 results/              results JSON per system, report.md, analysis.md, figures (v1/: pre-audit run)
 tests/test_core.py    metrics, generator rules, leak test, checkpoints, rewrite, stemmer, fusion
 ```
